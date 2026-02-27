@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Jet vs Alien – Final Production Version</title>
+
+    <style>
+        body {
+            background: black;
+            color: #00ffff;
+            text-align: center;
+            font-family: Arial;
+            margin: 0;
+        }
+
+        canvas {
+            border: 2px solid #00ffff;
+            background: black;
+            display: block;
+            margin: auto;
+        }
+
+        button,
+        input {
+            padding: 8px;
+            margin: 5px;
+            font-size: 16px;
+            background: black;
+            color: #00ffff;
+            border: 1px solid #00ffff;
+        }
+
+        #message {
+            position: absolute;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.2);
+            font-size: 64px;
+            font-weight: bold;
+            display: none;
+            color: orange;
+            text-shadow:
+                0 0 10px red,
+                0 0 20px orange,
+                0 0 40px yellow;
+        }
+
+        .zoom {
+            animation: zoomOut 1s ease forwards;
+        }
+
+        @keyframes zoomOut {
+
+            0% {
+                transform: translate(-50%, -50%) scale(0.2);
+                opacity: 0;
+            }
+
+            50% {
+                transform: translate(-50%, -50%) scale(1.5);
+                opacity: 1;
+            }
+
+            100% {
+                transform: translate(-50%, -50%) scale(1);
+                opacity: 0;
+            }
+
+        }
+    </style>
+
+</head>
+
+<body>
+
+    <h1>JET vs ALIEN</h1>
+
+    Player:
+    <input id="playerName" value="Player1">
+
+    <button onclick="pauseGame()">PAUSE</button>
+    <button onclick="resetGame()">PLAY AGAIN</button>
+
+    <h3>
+        Score: <span id="score">0</span>
+        Level: <span id="level">1</span>
+    </h3>
+
+    <div id="message"></div>
+
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+
+    <script>
+
+        window.onload = function () {
+
+            // =======================
+            // CANVAS
+            // =======================
+
+            const canvas = document.getElementById("gameCanvas");
+            const ctx = canvas.getContext("2d");
+
+            // =======================
+            // AUDIO
+            // =======================
+
+            let audioCtx = null;
+
+            function initAudio() {
+
+                if (!audioCtx)
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+                if (audioCtx.state === "suspended")
+                    audioCtx.resume();
+
+            }
+
+            function shootSound() {
+
+                initAudio();
+
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                osc.frequency.setValueAtTime(700, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.1);
+
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.1);
+
+            }
+
+            function explosionSound() {
+
+                initAudio();
+
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.4);
+
+                gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.4);
+
+            }
+
+            // =======================
+            // GAME STATE
+            // =======================
+
+            let paused = false;
+            let gameOver = false;
+
+            let score = 0;
+            let level = 1;
+            let alienSpeed = 0.6;
+
+            let burnFrame = 0;
+
+            // =======================
+            // JET
+            // =======================
+
+            const jet = {
+
+                x: 380,
+                y: 440,
+                width: 40,
+                height: 40,
+                speed: 5
+
+            };
+
+            let bullets = [];
+            let aliens = [];
+            let keys = {};
+
+            // =======================
+            // INPUT
+            // =======================
+
+            document.addEventListener("keydown", (e) => {
+
+                if (gameOver) return;
+
+                keys[e.key] = true;
+
+                if ((e.key === "f" || e.key === "F") && !paused) {
+
+                    bullets.push({
+
+                        x: jet.x + 18,
+                        y: jet.y,
+                        speed: 8
+
+                    });
+
+                    shootSound();
+
+                }
+
+            });
+
+            document.addEventListener("keyup", (e) => {
+                keys[e.key] = false;
+            });
+
+            // =======================
+            // UI
+            // =======================
+
+            function showMessage(text, color = "orange") {
+
+                const msg = document.getElementById("message");
+
+                msg.innerText = text;
+                msg.style.color = color;
+                msg.style.display = "block";
+
+                msg.classList.remove("zoom");
+                void msg.offsetWidth;
+                msg.classList.add("zoom");
+
+                setTimeout(() => {
+
+                    msg.style.display = "none";
+
+                }, 1000);
+
+            }
+
+            function updateUI() {
+
+                document.getElementById("score").innerText = score;
+                document.getElementById("level").innerText = level;
+
+            }
+
+            // =======================
+            // CONTROL
+            // =======================
+
+            window.pauseGame = function () {
+
+                if (gameOver) return;
+
+                paused = !paused;
+
+            };
+
+            window.resetGame = function () {
+
+                score = 0;
+                level = 1;
+                alienSpeed = 0.6;
+
+                bullets = [];
+                aliens = [];
+
+                jet.x = 380;
+
+                paused = false;
+                gameOver = false;
+
+                burnFrame = 0;
+
+                updateUI();
+
+                showMessage("LEVEL 1", "#00ff00");
+
+            };
+
+            // =======================
+            // SPAWN
+            // =======================
+
+            let lastSpawn = 0;
+
+            function spawnAlien(time) {
+
+                if (gameOver) return;
+
+                if (time - lastSpawn > 1500) {
+
+                    aliens.push({
+
+                        x: Math.random() * (canvas.width - 40),
+                        y: -40,
+                        size: 40
+
+                    });
+
+                    lastSpawn = time;
+
+                }
+
+            }
+
+            // =======================
+            // COLLISION
+            // =======================
+
+            function collision(a) {
+
+                return (
+
+                    jet.x < a.x + a.size &&
+                    jet.x + jet.width > a.x &&
+                    jet.y < a.y + a.size &&
+                    jet.y + jet.height > a.y
+
+                );
+
+            }
+
+            // =======================
+            // UPDATE
+            // =======================
+
+            function update(time) {
+
+                if (paused) return;
+
+                spawnAlien(time);
+
+                if (!gameOver) {
+
+                    if (keys["ArrowLeft"])
+                        jet.x -= jet.speed;
+
+                    if (keys["ArrowRight"])
+                        jet.x += jet.speed;
+
+                    // HARD CLAMP
+                    if (jet.x < 0)
+                        jet.x = 0;
+
+                    if (jet.x > canvas.width - jet.width)
+                        jet.x = canvas.width - jet.width;
+
+                }
+
+                // aliens
+                for (let i = aliens.length - 1; i >= 0; i--) {
+
+                    aliens[i].y += alienSpeed;
+
+                    if (!gameOver && collision(aliens[i])) {
+
+                        gameOver = true;
+                        paused = true;
+
+                        explosionSound();
+
+                        showMessage("CAPTURED", "red");
+
+                        break;
+
+                    }
+
+                }
+
+                // bullets collision
+                for (let i = aliens.length - 1; i >= 0; i--) {
+
+                    for (let j = bullets.length - 1; j >= 0; j--) {
+
+                        if (
+
+                            bullets[j].x < aliens[i].x + 40 &&
+                            bullets[j].x + 4 > aliens[i].x &&
+                            bullets[j].y < aliens[i].y + 40 &&
+                            bullets[j].y + 10 > aliens[i].y
+
+                        ) {
+
+                            aliens.splice(i, 1);
+                            bullets.splice(j, 1);
+
+                            score++;
+
+                            if (score % 10 === 0) {
+
+                                level++;
+                                alienSpeed += 0.3;
+
+                                showMessage("LEVEL " + level, "#00ff00");
+
+                            }
+
+                            updateUI();
+
+                            break;
+
+                        }
+
+                    }
+
+                }
+
+                if (gameOver)
+                    burnFrame++;
+
+            }
+
+            // =======================
+            // DRAW
+            // =======================
+
+            function draw() {
+
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // jet
+                ctx.fillStyle = gameOver ? "red" : "#00ffff";
+
+                ctx.beginPath();
+                ctx.moveTo(jet.x + 20, jet.y);
+                ctx.lineTo(jet.x, jet.y + 40);
+                ctx.lineTo(jet.x + 40, jet.y + 40);
+                ctx.fill();
+
+                // engine fire
+                if (!gameOver) {
+
+                    ctx.fillStyle = "orange";
+
+                    ctx.beginPath();
+                    ctx.arc(jet.x + 20, jet.y + 40, 5 + Math.random() * 3, 0, Math.PI * 2);
+                    ctx.fill();
+
+                }
+
+                // burn animation
+                if (gameOver) {
+
+                    for (let i = 0; i < burnFrame % 25; i++) {
+
+                        ctx.fillStyle = ["red", "orange", "yellow"][Math.floor(Math.random() * 3)];
+
+                        ctx.beginPath();
+
+                        ctx.arc(
+
+                            jet.x + Math.random() * 40,
+                            jet.y + Math.random() * 40,
+                            Math.random() * 6,
+                            0,
+                            Math.PI * 2
+
+                        );
+
+                        ctx.fill();
+
+                    }
+
+                }
+
+                // bullets
+                ctx.fillStyle = "yellow";
+
+                bullets.forEach(b => {
+
+                    b.y -= b.speed;
+                    ctx.fillRect(b.x, b.y, 4, 10);
+
+                });
+
+                // aliens
+                ctx.fillStyle = "red";
+
+                aliens.forEach(a => {
+
+                    ctx.beginPath();
+                    ctx.arc(a.x + 20, a.y + 20, 20, 0, Math.PI * 2);
+                    ctx.fill();
+
+                });
+
+            }
+
+            // =======================
+            // LOOP
+            // =======================
+
+            function loop(time) {
+
+                update(time);
+                draw();
+
+                requestAnimationFrame(loop);
+
+            }
+
+            // START GAME
+            resetGame();
+
+            requestAnimationFrame(loop);
+
+        };
+
+    </script>
+
+</body>
+
+</html>
