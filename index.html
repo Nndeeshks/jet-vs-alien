@@ -2,11 +2,9 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Jet vs Alien – Mobile Pro Fix</title>
+<title>Jet vs Alien – Full Stable Version</title>
 
 <style>
-
-/* ===== GLOBAL FIXES ===== */
 
 body{
 background:black;
@@ -15,7 +13,6 @@ text-align:center;
 font-family:Arial;
 margin:0;
 overflow:hidden;
-
 -webkit-user-select:none;
 user-select:none;
 -webkit-touch-callout:none;
@@ -28,17 +25,48 @@ display:block;
 margin:10px auto;
 width:95%;
 max-width:800px;
-height:320px; /* reduced height for mobile */
+height:400px;
 }
 
-/* ===== CONTROLS ===== */
+button,input{
+padding:6px;
+margin:5px;
+font-size:14px;
+background:black;
+color:#00ffff;
+border:1px solid #00ffff;
+}
 
+/* MESSAGE */
+#message{
+position:absolute;
+top:40%;
+left:50%;
+transform:translate(-50%,-50%) scale(0.2);
+font-size:48px;
+font-weight:bold;
+display:none;
+color:orange;
+text-shadow:0 0 10px red,0 0 20px orange,0 0 40px yellow;
+}
+
+.zoom{
+animation:zoomOut 1s ease forwards;
+}
+
+@keyframes zoomOut{
+0%{transform:translate(-50%,-50%) scale(0.2);opacity:0;}
+50%{transform:translate(-50%,-50%) scale(1.5);opacity:1;}
+100%{transform:translate(-50%,-50%) scale(1);opacity:0;}
+}
+
+/* MOBILE CONTROLS */
 #mobileControls{
 position:fixed;
-bottom:60px;
+bottom:70px;
 width:100%;
 display:flex;
-justify-content:center;   /* centered now */
+justify-content:center;
 gap:40px;
 z-index:1000;
 }
@@ -69,7 +97,6 @@ display:flex;
 gap:20px;
 }
 
-/* hide on desktop */
 @media(min-width:900px){
 #mobileControls{display:none;}
 }
@@ -80,20 +107,27 @@ gap:20px;
 <body>
 
 <h2>JET vs ALIEN</h2>
+
+Player:
+<input id="playerName" value="Player1">
+
+<button onclick="pauseGame()">PAUSE</button>
+<button onclick="resetGame()">PLAY AGAIN</button>
+
+<br>
 Score: <span id="score">0</span> |
 Level: <span id="level">1</span>
 
-<canvas id="gameCanvas" width="800" height="320"></canvas>
+<div id="message"></div>
+
+<canvas id="gameCanvas" width="800" height="400"></canvas>
 
 <div id="mobileControls">
-
 <button id="fireBtn" class="control fire">🔥</button>
-
 <div class="moveControls">
 <button id="leftBtn" class="control">⬅</button>
 <button id="rightBtn" class="control">➡</button>
 </div>
-
 </div>
 
 <script>
@@ -101,23 +135,20 @@ Level: <span id="level">1</span>
 const canvas=document.getElementById("gameCanvas");
 const ctx=canvas.getContext("2d");
 
-// ===== PREVENT LONG PRESS MENU =====
-document.addEventListener("contextmenu", e => e.preventDefault());
-document.addEventListener("selectstart", e => e.preventDefault());
-
-// ===== GAME STATE =====
 let score=0;
 let level=1;
-let alienSpeed=0.7;
+let alienSpeed=0.6;
 let paused=false;
 let gameOver=false;
+let burnFrame=0;
 
-const jet={x:350,y:260,width:40,height:40,speed:5};
+const jet={x:380,y:330,width:40,height:40,speed:5};
+
 let bullets=[];
 let aliens=[];
 let keys={};
 
-// ===== AUDIO =====
+// AUDIO
 let audioCtx=null;
 function initAudio(){
 if(!audioCtx)
@@ -130,7 +161,7 @@ function shootSound(){
 initAudio();
 const osc=audioCtx.createOscillator();
 const gain=audioCtx.createGain();
-osc.frequency.value=600;
+osc.frequency.value=700;
 gain.gain.value=0.3;
 osc.connect(gain);
 gain.connect(audioCtx.destination);
@@ -138,7 +169,31 @@ osc.start();
 osc.stop(audioCtx.currentTime+0.1);
 }
 
-// ===== KEYBOARD =====
+function explosionSound(){
+initAudio();
+const osc=audioCtx.createOscillator();
+const gain=audioCtx.createGain();
+osc.frequency.value=150;
+gain.gain.value=0.5;
+osc.connect(gain);
+gain.connect(audioCtx.destination);
+osc.start();
+osc.stop(audioCtx.currentTime+0.4);
+}
+
+// MESSAGE
+function showMessage(text,color="orange"){
+const msg=document.getElementById("message");
+msg.innerText=text;
+msg.style.color=color;
+msg.style.display="block";
+msg.classList.remove("zoom");
+void msg.offsetWidth;
+msg.classList.add("zoom");
+setTimeout(()=>msg.style.display="none",1000);
+}
+
+// CONTROLS
 document.addEventListener("keydown",(e)=>{
 keys[e.key]=true;
 if((e.key==="f"||e.key==="F")&&!paused&&!gameOver){
@@ -148,28 +203,21 @@ shootSound();
 });
 document.addEventListener("keyup",(e)=>keys[e.key]=false);
 
-// ===== MOBILE BUTTON HANDLER (FIXED) =====
-function addButtonControl(btn,keyName){
-
+// MOBILE
+function addButton(btn,key){
 btn.addEventListener("touchstart",(e)=>{
 e.preventDefault();
-keys[keyName]=true;
+keys[key]=true;
 },{passive:false});
 
 btn.addEventListener("touchend",(e)=>{
 e.preventDefault();
-keys[keyName]=false;
+keys[key]=false;
 },{passive:false});
-
-btn.addEventListener("touchcancel",(e)=>{
-e.preventDefault();
-keys[keyName]=false;
-},{passive:false});
-
 }
 
-addButtonControl(document.getElementById("leftBtn"),"ArrowLeft");
-addButtonControl(document.getElementById("rightBtn"),"ArrowRight");
+addButton(document.getElementById("leftBtn"),"ArrowLeft");
+addButton(document.getElementById("rightBtn"),"ArrowRight");
 
 document.getElementById("fireBtn").addEventListener("touchstart",(e)=>{
 e.preventDefault();
@@ -179,17 +227,41 @@ shootSound();
 }
 },{passive:false});
 
-// ===== SPAWN =====
-let lastSpawn=0;
+// GAME FUNCTIONS
+function pauseGame(){
+if(!gameOver)
+paused=!paused;
+}
 
+function resetGame(){
+score=0;
+level=1;
+alienSpeed=0.6;
+bullets=[];
+aliens=[];
+jet.x=380;
+paused=false;
+gameOver=false;
+burnFrame=0;
+updateUI();
+showMessage("LEVEL 1","#00ff00");
+}
+
+function updateUI(){
+document.getElementById("score").innerText=score;
+document.getElementById("level").innerText=level;
+}
+
+// SPAWN
+let lastSpawn=0;
 function spawnAlien(time){
-if(time-lastSpawn>1500){
+if(time-lastSpawn>1500&&!gameOver){
 aliens.push({x:Math.random()*(canvas.width-40),y:-40,size:40});
 lastSpawn=time;
 }
 }
 
-// ===== COLLISION =====
+// COLLISION
 function collision(a){
 return(
 jet.x<a.x+a.size &&
@@ -199,23 +271,28 @@ jet.y+jet.height>a.y
 );
 }
 
-// ===== UPDATE =====
+// UPDATE
 function update(time){
+if(paused)return;
 
 spawnAlien(time);
 
+if(!gameOver){
 if(keys["ArrowLeft"])jet.x-=jet.speed;
 if(keys["ArrowRight"])jet.x+=jet.speed;
 
 if(jet.x<0)jet.x=0;
 if(jet.x>canvas.width-jet.width)jet.x=canvas.width-jet.width;
+}
 
 for(let i=aliens.length-1;i>=0;i--){
 aliens[i].y+=alienSpeed;
 
-if(collision(aliens[i])){
+if(!gameOver&&collision(aliens[i])){
 gameOver=true;
-alert("CAPTURED!");
+paused=true;
+explosionSound();
+showMessage("CAPTURED","red");
 }
 }
 
@@ -230,24 +307,48 @@ bullets[j].y+10>aliens[i].y
 aliens.splice(i,1);
 bullets.splice(j,1);
 score++;
-document.getElementById("score").innerText=score;
+if(score%10===0){
+level++;
+alienSpeed+=0.3;
+showMessage("LEVEL "+level,"#00ff00");
+}
+updateUI();
 break;
 }
 }
 }
+
+if(gameOver)burnFrame++;
 }
 
-// ===== DRAW =====
+// DRAW
 function draw(){
-
 ctx.clearRect(0,0,canvas.width,canvas.height);
 
-ctx.fillStyle="#00ffff";
+ctx.fillStyle=gameOver?"red":"#00ffff";
 ctx.beginPath();
 ctx.moveTo(jet.x+20,jet.y);
 ctx.lineTo(jet.x,jet.y+40);
 ctx.lineTo(jet.x+40,jet.y+40);
 ctx.fill();
+
+// engine fire
+if(!gameOver){
+ctx.fillStyle="orange";
+ctx.beginPath();
+ctx.arc(jet.x+20,jet.y+40,5+Math.random()*3,0,Math.PI*2);
+ctx.fill();
+}
+
+// burn animation
+if(gameOver){
+for(let i=0;i<burnFrame%20;i++){
+ctx.fillStyle=["red","orange","yellow"][Math.floor(Math.random()*3)];
+ctx.beginPath();
+ctx.arc(jet.x+Math.random()*40,jet.y+Math.random()*40,Math.random()*6,0,Math.PI*2);
+ctx.fill();
+}
+}
 
 ctx.fillStyle="yellow";
 bullets.forEach(b=>{
@@ -269,6 +370,7 @@ draw();
 requestAnimationFrame(loop);
 }
 
+resetGame();
 requestAnimationFrame(loop);
 
 </script>
